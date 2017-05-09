@@ -29,7 +29,8 @@ public class TcpServer {
 		while (true) {
 			try {
 				Socket socket = serverSocket.accept();
-				System.err.println(socket.getInetAddress() + "连接成功...");
+				System.out.println(socket.getInetAddress() + ":"
+						+ socket.getPort() + "连接成功...");
 				new Thread(new ClientThread(socket)).start();
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
@@ -60,6 +61,18 @@ public class TcpServer {
 			}
 		}
 
+		private void disconnect() {
+			try {
+
+				dis.close();
+				socket.close();
+				System.out.println("断开连接");
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+
 		public void run() {
 			// TODO Auto-generated method stub
 			String recv;
@@ -69,21 +82,29 @@ public class TcpServer {
 			try {
 				if ((len = dis.read(buf)) > 0) {// 等待接收客户端发送过来的数据
 					recv = new String(buf);
+					// System.out.println(recv);
 					res = recv.split(":");
 					if (verify(res[1], res[2])
 							&& !GlobalValues.map.containsKey("station"
-									+ Integer.parseInt(res[0]))) { // 身份验证并且未成登录
+									+ Integer.parseInt(res[0]))) { // 身份验证并且未曾登录
+						System.out.println("login successful");
 						station = new Station(Integer.parseInt(res[0]));
 						GlobalValues.map.put(station.getStationName(), station);
 						station.initStation();
 						while ((len = dis.read(buf)) > 0) { // 收到数据
 							recv = new String(buf);
+							// System.out.println(recv);
 							res = recv.split(":");
 							if (res[1].equals("picture")) { // 收到图片数据
 								byte[] pictureBuf = new byte[153600];
+								byte[] temp = new byte[6400];
 								int cursor = 0;
-								while ((len = dis.read(pictureBuf, cursor, 640)) > 0) {
+								while ((len = dis.read(temp, 0, 6400)) > 0) {
+									for (int i = 0; i < len; i++) {
+										pictureBuf[cursor + i] = temp[i];
+									}
 									cursor = cursor + len;
+									// System.out.println(cursor);
 									if (cursor >= pictureBuf.length) {
 										break;
 									}
@@ -99,18 +120,11 @@ public class TcpServer {
 				}
 			} catch (IOException e1) {
 				// TODO Auto-generated catch block
+				disconnect();
 				e1.printStackTrace();
 			}
 
-			try {
-
-				dis.close();
-				socket.close();
-				System.out.println("断开连接");
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+			disconnect();
 		}
 	}
 }

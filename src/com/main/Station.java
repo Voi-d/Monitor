@@ -8,6 +8,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Vector;
 
@@ -30,7 +31,9 @@ public class Station {
 
 	private DBHandle dbInstance;
 	private MainJFrame UIInstance;
-	DefaultMutableTreeNode node;
+	private DefaultMutableTreeNode node;
+
+	private ArrayList<Coordinate> coordinateSets = new ArrayList<Coordinate>();
 
 	public Station(int stationNum) {
 		this.stationNum = stationNum;
@@ -77,21 +80,26 @@ public class Station {
 
 	public void updataData(String[] string) {
 		SimpleDateFormat df = new SimpleDateFormat("yyyyMMddHHmmss");
+		coordinateSets.clear();
+
 		for (int i = 0; i < 3; i++) {
 			Vector<Object> vobj = new Vector<Object>();
 			for (int j = 0; j < 7; j++) {
-				vobj.add(string[i * 7 + j]);
+				vobj.add(Integer.parseInt((String) (string[i * 7 + j])));
 			}
+
+			for (int j = 1; j < 7; j++) {			//判断超出警戒值的检测数据，并记录行列坐标，以作显示
+				if ((Integer) vobj.get(j) > 50) {
+					coordinateSets.add(new Coordinate(i, j));
+				}
+			}
+
 			data.setElementAt(vobj, i);
-			dbInstance.insertDB(stationName,
-					Integer.parseInt((String) vobj.get(0)),
-					df.format(new Date()),
-					Integer.parseInt((String) vobj.get(1)),
-					Integer.parseInt((String) vobj.get(2)),
-					Integer.parseInt((String) vobj.get(3)),
-					Integer.parseInt((String) vobj.get(4)),
-					Integer.parseInt((String) vobj.get(5)),
-					Integer.parseInt((String) vobj.get(6)));
+			dbInstance.insertDB(stationName, (Integer) vobj.get(0),		//将检测数据存入数据库
+					df.format(new Date()), (Integer) vobj.get(1),
+					(Integer) vobj.get(2), (Integer) vobj.get(3),
+					(Integer) vobj.get(4), (Integer) vobj.get(5),
+					(Integer) vobj.get(6));
 		}
 		hasData = true;
 	}
@@ -102,9 +110,11 @@ public class Station {
 			for (int j = 0; j < 320; j++) {
 				short read_data = 0;
 				int ret = 0xff;
+				//将高8位数据和低8位数据通过移位组合成16位数据
 				read_data = (short) (read_data | ((short) (buf[(320 * i + j) * 2]) & 0x00ff));
 				read_data = (short) (read_data << 8);
 				read_data = (short) (read_data | ((short) (buf[(320 * i + j) * 2 + 1]) & 0x00ff));
+				//分离出R、G、B数据（RGB565）
 				buf[2] = (byte) ((read_data >>> 11) << 3);
 				buf[1] = (byte) (((read_data & 0x7ff) >>> 5) << 2);
 				buf[0] = (byte) (((read_data & 0x1f) << 3));
@@ -128,7 +138,7 @@ public class Station {
 		if (!fp.exists()) {
 			fp.mkdirs();
 		}
-		FileOutputStream out = new FileOutputStream(path + dateString + ".jpg");
+		FileOutputStream out = new FileOutputStream(path + dateString + ".jpg");	//将图片存储到指定目录
 		JPEGImageEncoder encoder = JPEGCodec.createJPEGEncoder(out);
 		encoder.encode(tag);
 		out.close();
@@ -147,7 +157,11 @@ public class Station {
 	}
 
 	public boolean isAlert() {
-		return true;
+		return (coordinateSets.size() > 0) ? true : false;
+	}
+	
+	public ArrayList<Coordinate> getCoordinates(){
+		return coordinateSets;
 	}
 
 	public void exitStation() {

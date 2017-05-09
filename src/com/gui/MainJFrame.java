@@ -24,6 +24,7 @@ import javax.swing.Timer;
 
 import javax.swing.event.TreeSelectionEvent;
 import javax.swing.event.TreeSelectionListener;
+import javax.swing.table.DefaultTableCellRenderer;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.JTableHeader;
 import javax.swing.table.TableColumn;
@@ -34,12 +35,10 @@ import javax.swing.tree.DefaultTreeModel;
 import javax.swing.tree.TreeCellRenderer;
 import javax.swing.tree.TreePath;
 
-import sun.swing.table.DefaultTableCellHeaderRenderer;
-
 import com.database.DBHandle;
+import com.main.Coordinate;
 import com.main.GlobalValues;
 import com.main.Station;
-
 import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -60,6 +59,8 @@ import java.util.Vector;
 
 import javax.swing.JButton;
 
+import sun.swing.table.DefaultTableCellHeaderRenderer;
+
 public class MainJFrame implements ActionListener {
 
 	private JFrame frame;
@@ -67,7 +68,6 @@ public class MainJFrame implements ActionListener {
 	private DefaultMutableTreeNode node1, node2, node3, node4, root;
 	private DefaultTreeModel treeModel;
 	private DefaultTableModel realTimeTableModel, historyTableModel;
-	private DefaultTableCellHeaderRenderer tcr;
 	private JTable realTimeTable, historyTable;
 	private JSplitPane splitPane;
 	private JPanel realTimeDataPane, historyDataPanel, historyPicturePanel,
@@ -83,12 +83,20 @@ public class MainJFrame implements ActionListener {
 	private int staNum = 10; // 站点数量
 	private Timer timer;
 
+	private String[][] defaultData = { { "1", "0", "0", "0", "0", "0", "0" },
+			{ "2", "0", "0", "0", "0", "0", "0" },
+			{ "3", "0", "0", "0", "0", "0", "0" } };
+	private String[] defaultTitle = { "组号", "温度1", "温度2", "温度3", "温度4", "油液粘度",
+			"湿度" };
+
+	ArrayList<Coordinate> coordinateSets = new ArrayList<Coordinate>();
+
 	/**
 	 * Create the application.
 	 */
 	private MainJFrame() {
 		initialize();
-		timer = new Timer(500, this);
+		timer = new Timer(200, this);
 	}
 
 	public void actionPerformed(ActionEvent e) { // 定时刷新界面
@@ -96,13 +104,14 @@ public class MainJFrame implements ActionListener {
 			Station station;
 			if (GlobalValues.map.containsKey(staName)) {
 				station = GlobalValues.map.get(staName);
-			} else {
+			} else { // 选中站点退出时，自动切换到第一个连接的站点
 				station = GlobalValues.map.entrySet().iterator().next()
 						.getValue();
 			}
 			if (station.isHaveData()) {
 				realTimeTableModel.setDataVector(station.getTableData(),
 						station.getTableTitle());
+				coordinateSets = station.getCoordinates(); // 获取需要警示的行列坐标集
 			}
 			if (station.isHaveImage()) {
 				Image image = station.getImage();
@@ -112,9 +121,8 @@ public class MainJFrame implements ActionListener {
 				realTimePictureLable.setIcon(new ImageIcon(tag));
 			}
 		} else {
-			Object[][] data = null;
-			String[] title = null;
-			realTimeTableModel.setDataVector(data, title);
+			coordinateSets.clear(); // 所有站点断开连接，清楚行列坐标集
+			realTimeTableModel.setDataVector(defaultData, defaultTitle); // 显示默认数据
 		}
 
 		lists.clear();
@@ -124,7 +132,7 @@ public class MainJFrame implements ActionListener {
 				lists.add(station.getStationName());
 			}
 		}
-		//tree.expandPath(new TreePath(node1.getPath()));
+		// tree.expandPath(new TreePath(node1.getPath()));
 		tree.repaint();
 	}
 
@@ -200,7 +208,7 @@ public class MainJFrame implements ActionListener {
 						staName = nodeName;
 						string = node.getParent().toString();
 					}
-					timer.stop();
+					// timer.stop();
 					if (string.contains("实时数据")) {
 						splitPane.setRightComponent(realTimeDataPane);
 						timer.start();
@@ -216,12 +224,12 @@ public class MainJFrame implements ActionListener {
 						File file = new File("pictures/" + staName);
 						if (file.exists()) {
 							File fileList[] = file.listFiles();
-							for (int i = 0; (i < fileList.length && i < jLabels.length); i++) {
+							for (int i = fileList.length - 1, j = 0; (i >= 0 && j < jLabels.length); i--, j++) {
 								if (fileList[i].isFile()
 										&& (fileList[i].getName().endsWith(
 												".png") || fileList[i]
 												.getName().endsWith(".jpg"))) {
-									jLabels[i].setIcon(new ImageIcon(
+									jLabels[j].setIcon(new ImageIcon(
 											fileList[i].getPath()));
 								}
 							}
@@ -236,19 +244,36 @@ public class MainJFrame implements ActionListener {
 		// 实时数据面板
 		{
 			realTimeTableModel = new DefaultTableModel();
-			tcr = new DefaultTableCellHeaderRenderer();
-			tcr.setHorizontalAlignment(SwingConstants.CENTER);
+			DefaultTableCellRenderer tcr = new DefaultTableCellRenderer() {
+				private static final long serialVersionUID = 3398804151586656997L;
 
+				public Component getTableCellRendererComponent(JTable table,
+						Object value, boolean isSelected, boolean hasFocus,
+						int row, int column) {
+					setBackground(Color.white);
+					setForeground(Color.black);
+					for (int i = 0; i < coordinateSets.size(); i++) {
+						if ((row == coordinateSets.get(i).getX())
+								&& (column == coordinateSets.get(i).getY())) {
+							setForeground(Color.red);
+						}
+					}
+					return super.getTableCellRendererComponent(table, value,
+							isSelected, hasFocus, row, column);
+				}
+			};
+			tcr.setHorizontalAlignment(SwingConstants.CENTER);
+			realTimeTableModel.setDataVector(defaultData, defaultTitle);
 			realTimeTable = new JTable(realTimeTableModel);
-			realTimeTable.setFont(new Font("STSong", Font.PLAIN, 20));
 			realTimeTable.setDefaultRenderer(Object.class, tcr);
-			// realTimeTable.setEnabled(false); // 表格不可编辑
+			realTimeTable.setEnabled(false); // 表格不可编辑
 			realTimeTable.setRowHeight(50);
 			realTimeTable.setIntercellSpacing(new Dimension(0, 0));
 			JTableHeader header = realTimeTable.getTableHeader();
-			header.setFont(new Font("STFangsong", Font.PLAIN, 24));
+			header.setFont(new Font("STFangsong", Font.PLAIN, 20));
 
 			realTimeDataScrollPane = new JScrollPane(realTimeTable);
+			realTimeDataScrollPane.setBorder(new EmptyBorder(0, 0, 0, 0));
 
 			realTimeDataPane = new JPanel();
 			realTimeDataPane.setLayout(new BorderLayout(5, 10));
@@ -280,7 +305,9 @@ public class MainJFrame implements ActionListener {
 		// 历史数据面板
 		{
 			historyTableModel = new DefaultTableModel();
-
+			DefaultTableCellRenderer tcr = new DefaultTableCellHeaderRenderer();
+			tcr.setHorizontalAlignment(SwingConstants.CENTER);
+			
 			historyTable = new JTable(historyTableModel);
 			historyTable.setDefaultRenderer(Object.class, tcr);
 			historyTable.setIntercellSpacing(new Dimension(0, 0));
@@ -424,7 +451,7 @@ public class MainJFrame implements ActionListener {
 					try {
 						Runtime.getRuntime()
 								.exec("explorer.exe /e /select, "
-										+ "D:\\MyCode\\Java\\Monitor1.0\\pictures");
+										+ "D:\\MyCode\\Java\\Monitor\\pictures");
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
@@ -599,21 +626,22 @@ public class MainJFrame implements ActionListener {
 			JComponent c = (JComponent) renderer.getTreeCellRendererComponent(
 					tree, value, isSelected, expanded, leaf, row, hasFocus);
 
+			c.setOpaque(true);
+			DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
+			if (node.isLeaf() && node.getParent().toString().equals("实时数据")
+					&& lists.contains(value.toString())) {
+				c.setForeground(Color.RED);
+				// c.setForeground(getTextNonSelectionColor());
+				c.setBackground(getBackgroundNonSelectionColor());
+			} else {
+				c.setForeground(getTextNonSelectionColor());
+				c.setBackground(getBackgroundNonSelectionColor());
+			}
+
 			if (isSelected) {
 				c.setOpaque(false);
-				c.setForeground(getTextSelectionColor());
-			} else {
-				c.setOpaque(true);
-				DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
-				if (node.isLeaf() && node.getParent().toString().equals("实时数据")
-						&& lists.contains(value.toString())) {
-					c.setForeground(getTextNonSelectionColor());
-					c.setBackground(Color.RED);
-				} else {
-					c.setForeground(getTextNonSelectionColor());
-					c.setBackground(getBackgroundNonSelectionColor());
-				}
 			}
+
 			return c;
 		}
 	}
